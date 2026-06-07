@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Nysa",
+    "slug": "nysa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "nysa",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nysa.app",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Nysa lit tes données de santé (sommeil, activité) pour les afficher dans ton pôle Bien-être.",
+        "NSHealthUpdateUsageDescription": "Nysa peut enregistrer tes activités dans l'app Santé."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
+      }
+    },
+    "android": {
+      "package": "com.nysa.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F6F9EF",
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Nysa lit tes données de santé (sommeil, activité) pour ton pôle Bien-être.",
+          "NSHealthUpdateUsageDescription": "Nysa peut enregistrer tes activités dans l'app Santé.",
+          "background": false
+        }
+      ],
+      "react-native-health-connect"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
