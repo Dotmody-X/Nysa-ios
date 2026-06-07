@@ -27,6 +27,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="learning" options={{ href: null }} />
       <Tabs.Screen name="leisure" options={{ href: null }} />
       <Tabs.Screen name="auth" options={{ href: null }} />
+      <Tabs.Screen name="reminders" options={{ href: null }} />
     </Tabs>
   );
 }

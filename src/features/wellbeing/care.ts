@@ -2,6 +2,7 @@ import { createEntry, softDeleteEntry } from '@/db/repositories/entries';
 import { createLink } from '@/db/repositories/links';
 import type { Entry } from '@/db/models/Entry';
 import { POLE, RELATION } from '@/poles/types';
+import { scheduleOnceAt } from '@/lib/notifications';
 
 /** Practitioners (doctors / psy) + appointments. Appointments mirror into Planning. */
 
@@ -55,6 +56,11 @@ export async function addAppointment(args: {
   });
 
   await createLink(appt.id, event.id, RELATION.scheduledIn);
+
+  // Auto-reminder: notify 1h before the appointment (best-effort).
+  const remindAt = new Date(args.start - 60 * 60 * 1000);
+  void scheduleOnceAt('Rendez-vous', `${title} dans 1h`, remindAt);
+
   return appt;
 }
 

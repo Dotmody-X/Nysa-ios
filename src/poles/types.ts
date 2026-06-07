@@ -62,6 +62,12 @@ export type CalendarEventPayload = {
   allDay?: boolean;
 };
 
+export type ReminderPayload = {
+  at: number; // epoch ms (next fire time)
+  repeat: 'once' | 'daily';
+  notifId?: string; // scheduled local-notification id (to cancel)
+};
+
 export type HabitPayload = {
   schedule: 'daily';
   icon?: string;
@@ -232,6 +238,7 @@ export type EntryPayloadMap = {
   habit: HabitPayload;
   habit_check: HabitCheckPayload;
   energy: EnergyPayload;
+  reminder: ReminderPayload;
   sleep_log: SleepPayload;
   meal: MealPayload;
   meditation: MeditationPayload;

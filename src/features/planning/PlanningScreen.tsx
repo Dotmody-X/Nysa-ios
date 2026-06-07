@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useObservedQuery } from '@/db/hooks';
 import {
@@ -22,6 +23,7 @@ import {
   type HabitCheckPayload,
 } from '@/poles/types';
 import { startOfDay, endOfDay, isoDate } from '@/lib/time';
+import { DateTimeFields } from '@/components/DateTimePicker';
 import { addEvent, deleteEvent, updateEvent } from './planning';
 
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -32,6 +34,7 @@ const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}
 
 export function PlanningScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
   const palette = theme.poleColors.planning;
 
   const now = new Date();
@@ -109,10 +112,31 @@ export function PlanningScreen() {
 
   return (
     <Screen>
-      <Text variant="display">Planning</Text>
-      <Text variant="body" color={theme.colors.inkSoft}>
-        Ton calendrier, ton temps.
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <Text variant="display">Planning</Text>
+          <Text variant="body" color={theme.colors.inkSoft}>
+            Ton calendrier, ton temps.
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => router.push('/reminders')}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 8,
+            paddingHorizontal: 14,
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.colors.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+          }}
+        >
+          <Ionicons name="alarm" size={16} color={palette.solid} />
+          <Text variant="label">Rappels</Text>
+        </Pressable>
+      </View>
 
       {/* Calendar card */}
       <View
@@ -265,19 +289,26 @@ function EventModal({
   const existingStart = existing ? (existing.payload as CalendarEventPayload).start : null;
 
   const [title, setTitle] = useState('');
-  const [hour, setHour] = useState(9);
+  const [time, setTime] = useState(() => {
+    const d = new Date();
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
 
   React.useEffect(() => {
     if (visible) {
       setTitle(existing?.title ?? '');
-      setHour(existingStart ? new Date(existingStart).getHours() : 9);
+      const d = new Date();
+      if (existingStart) d.setTime(existingStart);
+      else d.setHours(9, 0, 0, 0);
+      setTime(d);
     }
   }, [visible, existing, existingStart]);
 
   const submit = async () => {
     if (!editing) return;
     const dayStart = new Date(year, month, editing.day).getTime();
-    const start = dayStart + hour * 3_600_000;
+    const start = dayStart + time.getHours() * 3_600_000 + time.getMinutes() * 60_000;
     if (existing) await updateEvent(existing, { title: title.trim() || 'Événement', start });
     else await addEvent({ title: title.trim() || 'Événement', start });
     onClose();
@@ -290,9 +321,9 @@ function EventModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(26,7,8,0.45)', justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(26,7,8,0.45)' }]} />
+        <View
           style={{ backgroundColor: theme.colors.bg, borderTopLeftRadius: theme.radius.bento, borderTopRightRadius: theme.radius.bento, padding: theme.spacing(6), gap: theme.spacing(3) }}
         >
           <Text variant="title">{existing ? 'Modifier l’événement' : 'Nouvel événement'}</Text>
@@ -316,19 +347,7 @@ function EventModal({
           <Text variant="label" color={theme.colors.inkSoft}>
             Heure
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {[7, 8, 9, 10, 11, 12, 14, 16, 18, 20].map((h) => (
-              <Pressable
-                key={h}
-                onPress={() => setHour(h)}
-                style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: theme.radius.md, backgroundColor: hour === h ? theme.colors.primary : theme.colors.surfaceAlt }}
-              >
-                <Text variant="label" color={hour === h ? theme.colors.onPrimary : theme.colors.ink}>
-                  {h}h
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <DateTimeFields value={time} onChange={setTime} withDate={false} />
 
           <Pressable onPress={submit} style={{ marginTop: theme.spacing(1), paddingVertical: 14, borderRadius: theme.radius.pill, alignItems: 'center', backgroundColor: theme.colors.primary }}>
             <Text variant="label" color={theme.colors.onPrimary}>
@@ -342,8 +361,8 @@ function EventModal({
               </Text>
             </Pressable>
           ) : null}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

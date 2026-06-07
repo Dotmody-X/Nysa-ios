@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, TextInput, View, type TextInputProps } from 'react-native';
+import { Modal, Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { Text } from './Text';
@@ -141,15 +141,23 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
   const { theme } = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(26,7,8,0.45)', justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: theme.colors.bg, borderTopLeftRadius: theme.radius.bento, borderTopRightRadius: theme.radius.bento, padding: theme.spacing(6), gap: theme.spacing(3) }}
+      {/* Backdrop sits BEHIND the sheet (sibling), so it never steals scroll
+          gestures from content like the wheel pickers. */}
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(26,7,8,0.45)' }]} />
+        <View
+          style={{
+            backgroundColor: theme.colors.bg,
+            borderTopLeftRadius: theme.radius.bento,
+            borderTopRightRadius: theme.radius.bento,
+            padding: theme.spacing(6),
+            gap: theme.spacing(3),
+          }}
         >
           <Text variant="title">{title}</Text>
           {children}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
