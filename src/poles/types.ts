@@ -11,6 +11,11 @@ export const POLE = {
   work: 'work',
   planning: 'planning',
   wellbeing: 'wellbeing',
+  finance: 'finance',
+  home: 'home',
+  relationships: 'relationships',
+  learning: 'learning',
+  leisure: 'leisure',
 } as const;
 
 // ---- Relation types (the edges of the graph) ------------------------------
@@ -25,6 +30,8 @@ export const RELATION = {
   reflects: 'reflects',
   /** habit_check —checks→ habit */
   checks: 'checks',
+  /** pantry_item —stockedFrom→ shopping_item (course cochée → rangée) */
+  stockedFrom: 'stocked_from',
 } as const;
 // Note: workouts reuse RELATION.scheduledIn to mirror into Planning.
 
@@ -104,6 +111,118 @@ export type WorkoutPayload = {
   intensity?: Rating;
 };
 
+export type MedicationPayload = {
+  dosage?: string; // e.g. "500 mg"
+  timesPerDay: number; // expected doses per day
+  note?: string;
+};
+
+export type MedIntakePayload = {
+  medId: string;
+  date: string; // YYYY-MM-DD
+};
+
+export type ShoppingItemPayload = {
+  qty?: string;
+};
+
+export type PantryItemPayload = {
+  qty?: string;
+};
+
+export type RecipePayload = {
+  ingredients: string[];
+  steps?: string;
+  durationMin?: number;
+};
+
+export type PractitionerPayload = {
+  specialty?: string;
+  phone?: string;
+};
+
+export type AppointmentPayload = {
+  practitionerId?: string;
+  practitionerName?: string;
+  start: number; // epoch ms
+  durationMin?: number;
+  location?: string;
+};
+
+/** Menstrual cycle — a logged period. Kept out of the AI context by default. */
+export type PeriodPayload = {
+  start: number; // epoch ms (day the period began)
+  end?: number; // epoch ms (day it ended), if known
+};
+
+export type MealPlanPayload = {
+  date: string; // YYYY-MM-DD
+  slot: 'lunch' | 'dinner';
+  recipeId?: string;
+};
+
+// ---- Finances (Phase 3) ---------------------------------------------------
+export type TransactionPayload = {
+  amount: number; // positive number; `kind` gives the sign
+  kind: 'expense' | 'income';
+  category: string;
+};
+
+export type BudgetPayload = {
+  monthly: number; // monthly spending budget in currency units
+};
+
+// ---- Maison (Phase 3) -----------------------------------------------------
+export type ChorePayload = {
+  done: boolean;
+};
+
+export type SubscriptionPayload = {
+  monthlyCost: number;
+  renewDay?: number; // day of month
+};
+
+export type MaintenancePayload = {
+  dueDate?: number; // epoch ms
+  note?: string;
+};
+
+// ---- Relations (Phase 4) --------------------------------------------------
+export type ContactPayload = {
+  birthday?: number; // epoch ms
+  lastSeen?: number; // epoch ms
+  notes?: string;
+};
+export type GiftIdeaPayload = {
+  contactId?: string;
+  bought: boolean;
+};
+
+// ---- Apprentissage (Phase 4) ----------------------------------------------
+export type BookPayload = {
+  status: 'to-read' | 'reading' | 'read';
+  author?: string;
+};
+export type CoursePayload = {
+  progress: number; // 0-100
+};
+export type NotePayload = {
+  content?: string;
+};
+
+// ---- Loisirs (Phase 4) ----------------------------------------------------
+export type MediaPayload = {
+  kind: 'film' | 'série' | 'livre' | 'jeu';
+  done: boolean;
+  rating?: number;
+};
+export type WishlistPayload = {
+  price?: number;
+};
+export type BucketPayload = {
+  done: boolean;
+};
+
 // ---- Type registry --------------------------------------------------------
 export type EntryPayloadMap = {
   project: ProjectPayload;
@@ -118,6 +237,29 @@ export type EntryPayloadMap = {
   meditation: MeditationPayload;
   mood: MoodPayload;
   workout: WorkoutPayload;
+  medication: MedicationPayload;
+  med_intake: MedIntakePayload;
+  shopping_item: ShoppingItemPayload;
+  pantry_item: PantryItemPayload;
+  recipe: RecipePayload;
+  practitioner: PractitionerPayload;
+  appointment: AppointmentPayload;
+  period: PeriodPayload;
+  meal_plan: MealPlanPayload;
+  transaction: TransactionPayload;
+  budget: BudgetPayload;
+  chore: ChorePayload;
+  subscription: SubscriptionPayload;
+  maintenance: MaintenancePayload;
+  contact: ContactPayload;
+  interaction: { contactId: string };
+  gift_idea: GiftIdeaPayload;
+  book: BookPayload;
+  course: CoursePayload;
+  note: NotePayload;
+  media: MediaPayload;
+  wishlist_item: WishlistPayload;
+  bucket_item: BucketPayload;
 };
 
 export type EntryType = keyof EntryPayloadMap;
@@ -126,4 +268,5 @@ export type EntryType = keyof EntryPayloadMap;
 export const METRIC = {
   focusHours: 'focus_hours_week',
   mindfulMinutes: 'mindful_minutes_week',
+  savings: 'savings_total',
 } as const;

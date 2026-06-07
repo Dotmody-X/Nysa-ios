@@ -1,11 +1,14 @@
-import { createEntry } from '@/db/repositories/entries';
+import { createEntry, queryEntriesBetween, softDeleteEntry } from '@/db/repositories/entries';
 import { createLink } from '@/db/repositories/links';
 import { bumpGoalByMetric } from '@/db/repositories/goals';
+import { startOfDay, endOfDay, isoDate } from '@/lib/time';
 import {
   POLE,
   RELATION,
   METRIC,
   type MealPayload,
+  type MedIntakePayload,
+  type MedicationPayload,
   type MeditationPayload,
   type MoodPayload,
   type SleepPayload,
@@ -66,3 +69,35 @@ export async function logWorkout(payload: WorkoutPayload) {
   await createLink(workout.id, event.id, RELATION.scheduledIn);
   return workout;
 }
+
+// ---- Medications ----------------------------------------------------------
+
+export async function addMedication(args: { name: string; dosage?: string; timesPerDay: number }) {
+  return createEntry({
+    poleId: POLE.wellbeing,
+    type: 'medication',
+    title: args.name,
+    payload: { dosage: args.dosage, timesPerDay: args.timesPerDay },
+  });
+}
+
+/** Record one dose taken today for a medication. */
+export async function logMedIntake(medId: string) {
+  return createEntry({
+    poleId: POLE.wellbeing,
+    type: 'med_intake',
+    title: 'Prise',
+    payload: { medId, date: isoDate() },
+  });
+}
+
+/** Undo the most recent dose logged today for a medication. */
+export async function removeLastMedIntake(medId: string) {
+  const todays = await queryEntriesBetween(POLE.wellbeing, 'med_intake', startOfDay(), endOfDay()).fetch();
+  const forMed = todays
+    .filter((e) => (e.payload as MedIntakePayload).medId === medId)
+    .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+  if (forMed[0]) await softDeleteEntry(forMed[0]);
+}
+
+export type { MedicationPayload };

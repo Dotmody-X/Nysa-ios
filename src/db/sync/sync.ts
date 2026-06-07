@@ -3,45 +3,102 @@ import { database } from '../index';
 import { supabase } from '@/lib/supabase';
 
 /**
- * Offline-first sync (skeleton — see CADRAGE.md §2).
+ * Client-side offline-first sync (no Edge Function needed).
  *
- * Strategy: WatermelonDB pushes local changes and pulls remote deltas using
- * `last_pulled_at` timestamps, so only what changed since the last sync moves
- * over the wire. The actual server logic lives in a Supabase Edge Function
- * (`sync`) that this calls — kept server-side so RLS and conflict resolution
- * are authoritative.
+ * Pull: fetch rows changed since `lastPulledAt` (server `updated_at`).
+ * Push: upsert local creates/updates straight into the user's tables.
+ * RLS guarantees a user only ever touches their own rows.
  *
- * This function is intentionally NOT called automatically. Trigger it on:
- *   - app foreground
- *   - connectivity restored
- *   - manual pull-to-refresh
- *
- * The Edge Function + Postgres tables are built in Phase 0.5; until then this
- * is a no-op-safe stub that logs and returns.
+ * Soft-deletes are modelled as a `deleted_at` column (not WatermelonDB's native
+ * destroy), so they travel as normal "updated" rows and the UI filters them out.
  */
-export async function syncDatabase(): Promise<void> {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session) {
-    // Not signed in yet — stay fully local. No error.
-    return;
+
+const SYNC_TABLES = ['entries', 'links', 'goals', 'tags'] as const;
+type SyncTable = (typeof SYNC_TABLES)[number];
+
+// Columns per table (besides `id`). `payload` is JSON in the DB but a string in
+// WatermelonDB, so it gets special handling.
+const COLUMNS: Record<SyncTable, string[]> = {
+  entries: ['pole_id', 'type', 'title', 'payload', 'occurred_at', 'created_at', 'updated_at', 'deleted_at'],
+  links: ['from_id', 'to_id', 'relation', 'created_at', 'updated_at', 'deleted_at'],
+  goals: [
+    'pole_id', 'title', 'target_type', 'metric', 'target_value', 'current_value',
+    'unit', 'deadline', 'is_template', 'created_at', 'updated_at', 'deleted_at',
+  ],
+  tags: ['label', 'color', 'created_at', 'updated_at', 'deleted_at'],
+};
+
+const NUMERIC = new Set([
+  'occurred_at', 'created_at', 'updated_at', 'deleted_at', 'target_value', 'current_value', 'deadline',
+]);
+
+// server row → WatermelonDB raw record
+function toLocal(table: SyncTable, row: Record<string, unknown>) {
+  const rec: Record<string, unknown> = { id: row.id };
+  for (const col of COLUMNS[table]) {
+    let v = row[col];
+    if (col === 'payload') v = JSON.stringify(v ?? {});
+    else if (NUMERIC.has(col) && v != null) v = Number(v);
+    rec[col] = v ?? null;
   }
+  return rec;
+}
+
+// WatermelonDB raw record → server row
+function toServer(table: SyncTable, rec: Record<string, unknown>, userId: string) {
+  const row: Record<string, unknown> = { id: rec.id, user_id: userId };
+  for (const col of COLUMNS[table]) {
+    let v = rec[col];
+    if (col === 'payload') v = typeof v === 'string' ? JSON.parse((v as string) || '{}') : (v ?? {});
+    row[col] = v ?? null;
+  }
+  row.updated_at = Date.now(); // mark for other devices' delta pulls
+  return row;
+}
+
+export async function syncDatabase(): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) return; // not signed in → stay local
 
   await synchronize({
     database,
-    pullChanges: async ({ lastPulledAt }) => {
-      const { data, error } = await supabase.functions.invoke('sync', {
-        body: { action: 'pull', lastPulledAt },
-      });
-      if (error) throw error;
-      return { changes: data.changes, timestamp: data.timestamp };
-    },
-    pushChanges: async ({ changes, lastPulledAt }) => {
-      const { error } = await supabase.functions.invoke('sync', {
-        body: { action: 'push', changes, lastPulledAt },
-      });
-      if (error) throw error;
-    },
-    // Soft-deletes use the `deleted_at` column rather than hard deletes.
     sendCreatedAsUpdated: true,
+    pullChanges: async ({ lastPulledAt }) => {
+      const since = lastPulledAt ?? 0;
+      const timestamp = Date.now();
+      const changes: Record<string, { created: unknown[]; updated: unknown[]; deleted: string[] }> = {};
+
+      for (const table of SYNC_TABLES) {
+        const { data, error } = await supabase.from(table).select('*').gt('updated_at', since);
+        if (error) throw error;
+        const created: unknown[] = [];
+        const updated: unknown[] = [];
+        for (const row of (data ?? []) as Record<string, unknown>[]) {
+          const rec = toLocal(table, row);
+          if (Number(row.created_at ?? 0) > since) created.push(rec);
+          else updated.push(rec);
+        }
+        changes[table] = { created, updated, deleted: [] };
+      }
+      return { changes, timestamp };
+    },
+    pushChanges: async ({ changes }) => {
+      for (const table of SYNC_TABLES) {
+        const tc = changes[table] as
+          | { created?: Record<string, unknown>[]; updated?: Record<string, unknown>[]; deleted?: string[] }
+          | undefined;
+        if (!tc) continue;
+        const rows = [...(tc.created ?? []), ...(tc.updated ?? [])].map((rec) => toServer(table, rec, userId));
+        if (rows.length) {
+          const { error } = await supabase.from(table).upsert(rows);
+          if (error) throw error;
+        }
+        if (tc.deleted?.length) {
+          const { error } = await supabase.from(table).delete().in('id', tc.deleted);
+          if (error) throw error;
+        }
+      }
+    },
   });
 }

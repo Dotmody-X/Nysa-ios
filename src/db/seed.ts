@@ -103,4 +103,80 @@ export async function seedIfEmpty(): Promise<void> {
     unit: 'min',
     isTemplate: true,
   });
+
+  // A demo medication to try the tracker.
+  await createEntry({
+    poleId: POLE.wellbeing,
+    type: 'medication',
+    title: 'Vitamine D',
+    payload: { dosage: '1000 UI', timesPerDay: 1 },
+  });
+
+  // Kitchen demo: pantry, shopping list, a recipe.
+  for (const name of ['Œufs', 'Pâtes', 'Tomates']) {
+    await createEntry({ poleId: POLE.wellbeing, type: 'pantry_item', title: name, payload: {} });
+  }
+  for (const name of ['Lait', 'Pain']) {
+    await createEntry({ poleId: POLE.wellbeing, type: 'shopping_item', title: name, payload: {} });
+  }
+  await createEntry({
+    poleId: POLE.wellbeing,
+    type: 'recipe',
+    title: 'Pâtes à la tomate',
+    payload: { ingredients: ['Pâtes', 'Tomates', 'Parmesan', 'Ail'] },
+  });
+
+  // A demo practitioner.
+  await createEntry({
+    poleId: POLE.wellbeing,
+    type: 'practitioner',
+    title: 'Dr. Martin',
+    payload: { specialty: 'Médecin généraliste' },
+  });
+
+  // Finances demo: budget + a couple transactions.
+  await createEntry({ poleId: POLE.finance, type: 'budget', title: 'Budget mensuel', payload: { monthly: 1500 } });
+  await createEntry({ poleId: POLE.finance, type: 'transaction', title: 'Courses', payload: { amount: 62, kind: 'expense', category: 'Courses' } });
+  await createEntry({ poleId: POLE.finance, type: 'transaction', title: 'Salaire', payload: { amount: 2200, kind: 'income', category: 'Salaire' } });
+  await createGoal({
+    poleId: POLE.finance,
+    title: 'Épargne',
+    targetType: 'reach',
+    metric: METRIC.savings,
+    targetValue: 5000,
+    unit: '€',
+    isTemplate: true,
+  });
+
+  // Maison demo: chores, a subscription, a maintenance item.
+  for (const name of ['Sortir les poubelles', 'Passer l’aspirateur']) {
+    await createEntry({ poleId: POLE.home, type: 'chore', title: name, payload: { done: false } });
+  }
+  await createEntry({ poleId: POLE.home, type: 'subscription', title: 'Netflix', payload: { monthlyCost: 13.49 } });
+  await createEntry({ poleId: POLE.home, type: 'subscription', title: 'Spotify', payload: { monthlyCost: 10.99 } });
+  await createEntry({
+    poleId: POLE.home,
+    type: 'maintenance',
+    title: 'Révision chaudière',
+    payload: { dueDate: Date.now() + 20 * 86400000, note: 'Annuel' },
+  });
+
+  // Relations demo
+  await createEntry({
+    poleId: POLE.relationships,
+    type: 'contact',
+    title: 'Léa',
+    payload: { lastSeen: Date.now() - 9 * 86400000, birthday: new Date(1996, 4, 12).getTime() },
+  });
+  await createEntry({ poleId: POLE.relationships, type: 'gift_idea', title: 'Carnet de voyage', payload: { bought: false } });
+
+  // Apprentissage demo
+  await createEntry({ poleId: POLE.learning, type: 'book', title: 'Atomic Habits', payload: { status: 'reading', author: 'James Clear' } });
+  await createEntry({ poleId: POLE.learning, type: 'course', title: 'React Native avancé', payload: { progress: 40 } });
+  await createEntry({ poleId: POLE.learning, type: 'note', title: 'Idée app', payload: { content: 'Penser à la sync offline-first.' } });
+
+  // Loisirs demo
+  await createEntry({ poleId: POLE.leisure, type: 'media', title: 'Dune 2', payload: { kind: 'film', done: false } });
+  await createEntry({ poleId: POLE.leisure, type: 'wishlist_item', title: 'Casque audio', payload: { price: 199 } });
+  await createEntry({ poleId: POLE.leisure, type: 'bucket_item', title: 'Voir une aurore boréale', payload: { done: false } });
 }

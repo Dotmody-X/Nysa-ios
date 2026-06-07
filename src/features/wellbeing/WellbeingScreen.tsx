@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { isHealthAvailable, requestSleepPermission, readLastNightSleepMinutes } from '@/integrations/health';
 import { Screen } from '@/components/Screen';
@@ -21,6 +22,7 @@ import {
   type MoodPayload,
   type SleepPayload,
   type WorkoutPayload,
+  type MedicationPayload,
 } from '@/poles/types';
 import { startOfDay, endOfDay, formatDuration } from '@/lib/time';
 import { logMeal, logMeditation, logMood, logSleep, logWorkout } from './wellbeing';
@@ -30,6 +32,7 @@ const MOOD_FACE = ['😞', '😕', '😐', '🙂', '😄'];
 
 export function WellbeingScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
   const palette = theme.poleColors.wellbeing;
 
   const sleeps = useObservedQuery<Entry>(() => queryEntries(POLE.wellbeing, 'sleep_log'), [], ['payload']);
@@ -49,6 +52,13 @@ export function WellbeingScreen() {
     [],
     ['current_value', 'target_value'],
   );
+  const meds = useObservedQuery<Entry>(() => queryEntries(POLE.wellbeing, 'medication'), [], ['payload']);
+  const medIntakes = useObservedQuery<Entry>(
+    () => queryEntriesBetween(POLE.wellbeing, 'med_intake', startOfDay(), endOfDay()),
+    [],
+  );
+
+  const medsExpected = meds.reduce((s, m) => s + ((m.payload as MedicationPayload).timesPerDay || 0), 0);
 
   const [open, setOpen] = useState<LogKind | null>(null);
 
@@ -146,6 +156,47 @@ export function WellbeingScreen() {
         <BentoCard icon="barbell" title="Calme" accent="secondary" subtitle="médité aujourd'hui">
           <Text variant="stat">{meditatedToday} min</Text>
         </BentoCard>
+
+        <BentoCard
+          icon="medkit"
+          title="Médicaments"
+          accent="secondary"
+          subtitle={medsExpected ? `${medIntakes.length} / ${medsExpected} aujourd'hui` : 'À configurer'}
+          onPress={() => router.push('/medications')}
+        />
+
+        <BentoCard
+          icon="restaurant"
+          title="Cuisine"
+          accent="secondary"
+          subtitle="Courses · placard · recettes"
+          onPress={() => router.push('/kitchen')}
+        />
+
+        <BentoCard
+          icon="medical"
+          title="Médecins & RDV"
+          accent="secondary"
+          subtitle="Praticiens · rendez-vous"
+          onPress={() => router.push('/care')}
+        />
+
+        <BentoCard
+          icon="calendar-number"
+          title="Repas"
+          accent="secondary"
+          subtitle="Planning de la semaine"
+          onPress={() => router.push('/mealplan')}
+        />
+
+        <BentoCard
+          span={2}
+          icon="flower"
+          title="Cycle"
+          accent="secondary"
+          subtitle="Suivi privé du cycle menstruel"
+          onPress={() => router.push('/cycle')}
+        />
       </BentoGrid>
 
       {/* Quick log */}

@@ -140,6 +140,11 @@ export function HomeScreen() {
               if (pole.key === 'work') router.push('/work');
               else if (pole.key === 'planning') router.push('/planning');
               else if (pole.key === 'wellbeing') router.push('/wellbeing');
+              else if (pole.key === 'finance') router.push('/finance');
+              else if (pole.key === 'home') router.push('/household');
+              else if (pole.key === 'relationships') router.push('/relationships');
+              else if (pole.key === 'learning') router.push('/learning');
+              else if (pole.key === 'leisure') router.push('/leisure');
               else router.push('/poles');
             }}
           >

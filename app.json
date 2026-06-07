@@ -7,6 +7,7 @@
     "scheme": "nysa",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nysa.app",
@@ -19,7 +20,11 @@
       }
     },
     "android": {
-      "package": "com.nysa.app"
+      "package": "com.nysa.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#D6DA2F"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -44,7 +49,16 @@
           "background": false
         }
       ],
-      "react-native-health-connect"
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

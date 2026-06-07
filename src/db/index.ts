@@ -17,7 +17,11 @@ import { Tag } from './models/Tag';
  */
 const adapter = new SQLiteAdapter({
   schema,
-  jsi: true,
+  // JSI disabled: the on-device LLM (ExecuTorch) interferes with WatermelonDB's
+  // JSI install in this native build, causing an `initializeJSI of null` crash.
+  // The classic async bridge adapter works fine and avoids it. Negligible perf
+  // impact at this data scale.
+  jsi: false,
   onSetUpError: (error) => {
     console.error('[db] failed to set up WatermelonDB', error);
   },

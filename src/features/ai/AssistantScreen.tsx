@@ -14,8 +14,29 @@ import { MotiView } from 'moti';
 import { Text } from '@/components/Text';
 import { useTheme } from '@/theme/ThemeProvider';
 import { runAssistant, SKILL_EXAMPLES } from './skills';
+import { useLlmStatus } from './llmStatus';
 
 type Msg = { role: 'user' | 'assistant'; text: string };
+
+function LlmBadge() {
+  const { theme } = useTheme();
+  const { state, progress } = useLlmStatus();
+  if (state === 'off') return null; // no on-device model installed
+  const label =
+    state === 'ready'
+      ? 'IA locale prête'
+      : state === 'downloading'
+        ? `Téléchargement du modèle ${Math.round(progress * 100)}%`
+        : state === 'loading'
+          ? 'Chargement du modèle…'
+          : 'IA locale indisponible';
+  const color = state === 'ready' ? theme.colors.success : state === 'error' ? theme.colors.danger : theme.colors.muted;
+  return (
+    <Text variant="caption" color={color} style={{ marginTop: 2 }}>
+      ● {label}
+    </Text>
+  );
+}
 
 export function AssistantScreen() {
   const { theme } = useTheme();
@@ -74,9 +95,12 @@ export function AssistantScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={theme.colors.ink} />
         </Pressable>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles" size={22} color={theme.colors.primary} />
-          <Text variant="title">Assistant</Text>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="sparkles" size={22} color={theme.colors.primary} />
+            <Text variant="title">Assistant</Text>
+          </View>
+          <LlmBadge />
         </View>
       </View>
 

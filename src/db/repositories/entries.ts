@@ -58,6 +58,15 @@ export async function patchPayload<T extends EntryType>(
   });
 }
 
+/** Rename an entry (its display title). */
+export async function renameEntry(entry: Entry, title: string): Promise<void> {
+  await database.write(async () => {
+    await entry.update((e) => {
+      e.title = title;
+    });
+  });
+}
+
 /** Soft-delete (keeps the row for sync, hides it everywhere). */
 export async function softDeleteEntry(entry: Entry): Promise<void> {
   await database.write(async () => {
