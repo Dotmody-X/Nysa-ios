@@ -40,6 +40,29 @@ export async function createGoal(args: {
   );
 }
 
+/** Edit a goal's editable fields. */
+export async function updateGoal(
+  goal: Goal,
+  patch: Partial<{ title: string; targetValue: number | null; unit: string | null; currentValue: number }>,
+): Promise<void> {
+  await database.write(async () => {
+    await goal.update((g) => {
+      if (patch.title !== undefined) g.title = patch.title;
+      if (patch.targetValue !== undefined) g.targetValue = patch.targetValue;
+      if (patch.unit !== undefined) g.unit = patch.unit;
+      if (patch.currentValue !== undefined) g.currentValue = patch.currentValue;
+    });
+  });
+}
+
+export async function deleteGoal(goal: Goal): Promise<void> {
+  await database.write(async () => {
+    await goal.update((g) => {
+      g.deletedAt = Date.now();
+    });
+  });
+}
+
 /** Increment a goal's progress by metric. Safe no-op if the goal doesn't exist. */
 export async function bumpGoalByMetric(metric: string, delta: number): Promise<void> {
   const found = await goals()

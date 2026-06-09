@@ -34,7 +34,16 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/doux.wav",
+            "./assets/sounds/cloche.wav",
+            "./assets/sounds/marimba.wav"
+          ]
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -51,6 +60,20 @@
         }
       ],
       "react-native-health-connect",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Nysa accède à tes photos pour ajouter une image à un médicament.",
+          "cameraPermission": "Nysa accède à l'appareil photo pour photographier un médicament."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Nysa synchronise tes événements Planning avec ton calendrier.",
+          "remindersPermission": "Nysa peut créer des rappels liés à tes événements."
+        }
+      ],
       [
         "expo-build-properties",
         {

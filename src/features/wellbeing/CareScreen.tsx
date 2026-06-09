@@ -8,8 +8,9 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { useObservedQuery } from '@/db/hooks';
 import { queryEntries } from '@/db/repositories/entries';
 import type { Entry } from '@/db/models/Entry';
-import { POLE, type AppointmentPayload, type PractitionerPayload } from '@/poles/types';
+import { POLE, type AppointmentPayload, type PractitionerPayload, type MeasurePayload } from '@/poles/types';
 import { addAppointment, addPractitioner, cancelAppointment, removePractitioner } from './care';
+import { MEASURE_TYPES, queryMeasures, logMeasure, deleteMeasure } from './wellbeing';
 
 const HOURS = [8, 9, 10, 11, 14, 15, 16, 17, 18];
 
@@ -45,8 +46,15 @@ export function CareScreen() {
     [appointments],
   );
 
+  const measures = useObservedQuery<Entry>(() => queryMeasures(), [], ['payload', 'title']);
+  const recentMeasures = useMemo(
+    () => [...measures].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, 12),
+    [measures],
+  );
+
   const [apptModal, setApptModal] = useState(false);
   const [pracModal, setPracModal] = useState(false);
+  const [measureModal, setMeasureModal] = useState(false);
 
   return (
     <Screen account={false}>
@@ -152,9 +160,87 @@ export function CareScreen() {
         )}
       </View>
 
+      {/* Measures */}
+      <View style={{ marginTop: theme.spacing(7), flexDirection: 'row', alignItems: 'center' }}>
+        <Text variant="title" style={{ flex: 1 }}>
+          Mesures
+        </Text>
+        <Pressable onPress={() => setMeasureModal(true)} style={pillBtn(theme, theme.colors.surface)}>
+          <Ionicons name="add" size={16} color={theme.colors.ink} />
+          <Text variant="label">Mesure</Text>
+        </Pressable>
+      </View>
+      <View style={{ marginTop: theme.spacing(3), gap: 10 }}>
+        {recentMeasures.length === 0 ? (
+          <Text variant="caption" color={theme.colors.muted}>
+            Aucune mesure. Note ton poids, ta tension…
+          </Text>
+        ) : (
+          recentMeasures.map((m) => {
+            const p = m.payload as MeasurePayload;
+            return (
+              <Row key={m.id}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="body">{m.title}</Text>
+                  <Text variant="label" color={theme.colors.muted}>
+                    {m.occurredAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+                <Text variant="body" color={palette.solid} style={{ fontFamily: theme.fonts.accent }}>
+                  {p.value} {p.unit ?? ''}
+                </Text>
+                <Pressable onPress={() => deleteMeasure(m)} hitSlop={8}>
+                  <Ionicons name="close" size={18} color={theme.colors.muted} />
+                </Pressable>
+              </Row>
+            );
+          })
+        )}
+      </View>
+
       <PractitionerModal visible={pracModal} onClose={() => setPracModal(false)} />
       <AppointmentModal visible={apptModal} onClose={() => setApptModal(false)} practitioners={practitioners} />
+      <MeasureModal visible={measureModal} onClose={() => setMeasureModal(false)} />
     </Screen>
+  );
+}
+
+function MeasureModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { theme } = useTheme();
+  const [kind, setKind] = useState(MEASURE_TYPES[0].kind);
+  const [value, setValue] = useState('');
+  const meta = MEASURE_TYPES.find((m) => m.kind === kind);
+
+  const submit = async () => {
+    const v = Number(value.replace(',', '.'));
+    if (!v) return;
+    await logMeasure(kind, v, meta?.unit);
+    setValue('');
+    onClose();
+  };
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Nouvelle mesure">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        {MEASURE_TYPES.map((m) => (
+          <Chip key={m.kind} label={m.label} active={kind === m.kind} onPress={() => setKind(m.kind)} />
+        ))}
+      </ScrollView>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <TextInput
+          value={value}
+          onChangeText={setValue}
+          placeholder="Valeur"
+          placeholderTextColor={theme.colors.muted}
+          keyboardType="numeric"
+          style={[field(theme), { flex: 1 }]}
+        />
+        <Text variant="body" color={theme.colors.muted}>
+          {meta?.unit}
+        </Text>
+      </View>
+      <PrimaryBtn label="Enregistrer" onPress={submit} />
+    </Sheet>
   );
 }
 

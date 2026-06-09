@@ -1,42 +1,76 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { BentoCard } from '@/components/BentoCard';
+import { BentoGrid } from '@/components/BentoGrid';
+import { StackedCard } from '@/components/StackedCard';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useObservedQuery } from '@/db/hooks';
-import { queryEntries, queryEntriesBetween, patchPayload } from '@/db/repositories/entries';
+import { queryEntriesBetween } from '@/db/repositories/entries';
+import { queryGoalByMetric } from '@/db/repositories/goals';
 import type { Entry } from '@/db/models/Entry';
-import { POLE, type ProjectPayload, type TaskPayload, type TimeBlockPayload } from '@/poles/types';
-import { startOfDay, endOfDay, formatClock, formatDuration } from '@/lib/time';
+import type { Goal } from '@/db/models/Goal';
+import { POLE, METRIC, type TimeBlockPayload, type TaskPayload, type ProjectPayload } from '@/poles/types';
+import { startOfDay, endOfDay, formatDuration, formatClock } from '@/lib/time';
 import { useTimer } from './timerStore';
-import { finishSession } from './tracking';
-import { EnergyModal } from './EnergyModal';
+import { queryProjects, queryTasks } from './work';
+
+function weekStartMs(): number {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 export function WorkScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
+  const palette = theme.poleColors.work;
 
-  const projects = useObservedQuery<Entry>(() => queryEntries(POLE.work, 'project'), [], ['title', 'payload']);
-  const tasks = useObservedQuery<Entry>(() => queryEntries(POLE.work, 'task'), [], ['title', 'payload']);
+  const projects = useObservedQuery<Entry>(() => queryProjects(), [], ['title', 'payload']);
+  const tasks = useObservedQuery<Entry>(() => queryTasks(), [], ['title', 'payload']);
   const todayBlocks = useObservedQuery<Entry>(
     () => queryEntriesBetween(POLE.work, 'time_block', startOfDay(), endOfDay()),
     [],
     ['payload'],
   );
-
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = projects.find((p) => p.id === selectedId) ?? projects[0] ?? null;
+  const weekBlocks = useObservedQuery<Entry>(
+    () => queryEntriesBetween(POLE.work, 'time_block', weekStartMs(), Date.now() + 86_400_000),
+    [],
+    ['payload'],
+  );
+  const focusGoals = useObservedQuery<Goal>(() => queryGoalByMetric(METRIC.focusHours), [], ['current_value', 'target_value']);
 
   const todaySec = useMemo(
-    () => todayBlocks.reduce((sum, b) => sum + ((b.payload as TimeBlockPayload).durationSec ?? 0), 0),
+    () => todayBlocks.reduce((s, b) => s + ((b.payload as TimeBlockPayload).durationSec ?? 0), 0),
     [todayBlocks],
   );
-
-  const projectTasks = useMemo(
-    () => tasks.filter((t) => (t.payload as TaskPayload).projectId === selected?.id),
-    [tasks, selected?.id],
+  const weekSec = useMemo(
+    () => weekBlocks.reduce((s, b) => s + ((b.payload as TimeBlockPayload).durationSec ?? 0), 0),
+    [weekBlocks],
   );
+  const activeProjects = useMemo(
+    () => projects.filter((p) => (p.payload as ProjectPayload).status === 'active').length,
+    [projects],
+  );
+  const openTasks = useMemo(() => tasks.filter((t) => !(t.payload as TaskPayload).done), [tasks]);
+  const tasksDone = tasks.length - openTasks.length;
+  const lateTasks = useMemo(() => {
+    const now = Date.now();
+    return openTasks.filter((t) => {
+      const due = (t.payload as TaskPayload).due;
+      return due != null && due < startOfDay() ? true : false;
+    }).length;
+  }, [openTasks]);
+
+  // Week focus = actual logged time this week (auto-resets weekly), not the
+  // cumulative goal counter.
+  const weekH = weekSec / 3600;
+  const targetH = focusGoals[0]?.targetValue ?? 20;
+  const pct = targetH > 0 ? Math.min(1, weekH / targetH) : 0;
 
   return (
     <Screen>
@@ -45,155 +79,140 @@ export function WorkScreen() {
         {formatDuration(todaySec)} de focus aujourd'hui
       </Text>
 
-      <TimerWidget project={selected} />
+      <RunningBar />
 
-      {/* Project chips */}
-      <View style={{ marginTop: theme.spacing(7) }}>
-        <Text variant="title">Projets</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: theme.spacing(3) }}>
-          {projects.map((p) => {
-            const active = p.id === selected?.id;
-            const color = (p.payload as ProjectPayload).color ?? theme.colors.accent;
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => setSelectedId(p.id)}
-                style={{
-                  paddingVertical: 10,
-                  paddingHorizontal: 16,
-                  borderRadius: theme.radius.pill,
-                  backgroundColor: active ? theme.colors.ink : theme.colors.surface,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <View style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: color }} />
-                <Text variant="label" color={active ? theme.colors.bg : theme.colors.ink}>
-                  {p.title}
-                </Text>
-              </Pressable>
-            );
-          })}
+      <BentoGrid>
+        <BentoCard tone="primary" span={1} tall subtitle="aujourd'hui" title="Focus" icon="time">
+          <Text variant="stat" color={theme.colors.onPrimary}>
+            {formatDuration(todaySec)}
+          </Text>
+        </BentoCard>
+        <BentoCard tone="secondary" span={1} tall subtitle={lateTasks ? `${lateTasks} en retard` : 'à faire'} title="Tâches" icon="checkbox">
+          <Text variant="stat" color={theme.colors.ink}>
+            {openTasks.length}
+          </Text>
+        </BentoCard>
+      </BentoGrid>
+
+      {/* Week focus goal */}
+      <View style={{ marginTop: theme.spacing(3), backgroundColor: theme.colors.accent, borderRadius: theme.radius.bento, padding: theme.spacing(5) }}>
+        <Text variant="label" color={theme.colors.onAccent}>
+          Focus de la semaine
+        </Text>
+        <Text variant="body" color={theme.colors.onAccent} style={{ marginTop: 2 }}>
+          {weekH.toFixed(1)} / {targetH} h · {Math.round(pct * 100)}%
+        </Text>
+        <View style={{ height: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 10, overflow: 'hidden' }}>
+          <View style={{ width: `${pct * 100}%`, height: 8, backgroundColor: theme.colors.primary }} />
         </View>
       </View>
 
-      {/* Tasks of selected project */}
-      <View style={{ marginTop: theme.spacing(6), gap: 10 }}>
-        {projectTasks.length === 0 ? (
-          <Text variant="caption" color={theme.colors.muted}>
-            Aucune tâche pour ce projet.
-          </Text>
-        ) : (
-          projectTasks.map((task) => {
-            const done = (task.payload as TaskPayload).done;
-            return (
-              <Pressable
-                key={task.id}
-                onPress={() => patchPayload<'task'>(task, { done: !done })}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  backgroundColor: theme.colors.surface,
-                  borderRadius: theme.radius.md,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  padding: theme.spacing(4),
-                }}
-              >
-                <Ionicons
-                  name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={24}
-                  color={done ? theme.colors.success : theme.colors.muted}
-                />
-                <Text
-                  variant="body"
-                  color={done ? theme.colors.muted : theme.colors.ink}
-                  style={done ? { textDecorationLine: 'line-through' } : undefined}
-                >
-                  {task.title}
-                </Text>
-              </Pressable>
-            );
-          })
-        )}
+      {/* Sub-poles — stacked classification cards */}
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <StackedCard
+          withHandle={false}
+          title="Projets"
+          subtitle={`${activeProjects} actif${activeProjects > 1 ? 's' : ''} · ${projects.length} au total`}
+          center={String(activeProjects)}
+          progress={projects.length ? activeProjects / projects.length : 0}
+          bg={theme.colors.primary}
+          fg={theme.colors.ink}
+          ring={theme.colors.accent}
+          onPress={() => router.push('/work/projects')}
+        />
+        <StackedCard
+          title="Tâches"
+          subtitle={`${openTasks.length} à faire · ${tasksDone} faites`}
+          center={String(openTasks.length)}
+          progress={tasks.length ? tasksDone / tasks.length : 0}
+          bg={theme.colors.secondary}
+          fg={theme.colors.ink}
+          ring={theme.colors.accent}
+          onPress={() => router.push('/work/tasks')}
+        />
+        <StackedCard
+          title="Time-tracker"
+          subtitle="Chrono & saisie manuelle"
+          center={`${Math.round(todaySec / 60)}m`}
+          progress={Math.min(1, todaySec / (8 * 3600))}
+          bg={theme.colors.surface}
+          fg={theme.colors.ink}
+          ring={theme.colors.accent}
+          onPress={() => router.push('/work/timetracker')}
+        />
+      </View>
+
+      {/* Secondary links */}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: theme.spacing(5) }}>
+        <MiniLink icon="pulse" label="Énergie & focus" onPress={() => router.push('/work/energy')} />
+        <MiniLink icon="bar-chart" label="Revue" onPress={() => router.push('/work/review')} />
       </View>
     </Screen>
   );
 }
 
-/** Live timer + start/stop. Stopping opens the energy check-in, then writes
- * the whole interconnected session via finishSession(). */
-function TimerWidget({ project }: { project: Entry | null }) {
+function MiniLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
   const { theme } = useTheme();
-  const { running, startedAt, start, reset } = useTimer();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: theme.spacing(4),
+        paddingHorizontal: theme.spacing(4),
+      }}
+    >
+      <Ionicons name={icon} size={18} color={theme.colors.accent} />
+      <Text variant="label" style={{ flex: 1 }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Compact bar shown only while a session is running — taps through to the tracker. */
+function RunningBar() {
+  const { theme } = useTheme();
+  const router = useRouter();
+  const { running, startedAt, projectTitle } = useTimer();
   const [elapsed, setElapsed] = useState(0);
-  const [pendingEnd, setPendingEnd] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!running || !startedAt) {
-      setElapsed(0);
-      return;
-    }
+    if (!running || !startedAt) return;
+    setElapsed(Math.floor((Date.now() - startedAt) / 1000));
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
     return () => clearInterval(id);
   }, [running, startedAt]);
 
-  const onStop = () => setPendingEnd(Date.now());
-
-  const commit = async (energy?: { level: 1 | 2 | 3 | 4 | 5; focus: 1 | 2 | 3 | 4 | 5 }) => {
-    if (!startedAt || !pendingEnd) return;
-    await finishSession({
-      startedAt,
-      endedAt: pendingEnd,
-      projectId: project?.id,
-      projectTitle: project?.title,
-      energy,
-    });
-    setPendingEnd(null);
-    reset();
-  };
-
+  if (!running) return null;
   return (
-    <>
-      <BentoCard tone={running ? 'accent' : 'surface'} span={2} tall>
-        <View style={{ flex: 1, justifyContent: 'space-between' }}>
-          <Text variant="label" color={running ? theme.colors.onAccent : theme.colors.inkSoft}>
-            {running ? `En cours · ${project?.title ?? 'Sans projet'}` : 'Time tracker'}
-          </Text>
-          <Text variant="stat" color={running ? theme.colors.onAccent : theme.colors.ink} style={{ fontSize: 44, lineHeight: 48 }}>
-            {formatClock(running ? elapsed : 0)}
-          </Text>
-          <Pressable
-            onPress={() => (running ? onStop() : start({ projectId: project?.id, projectTitle: project?.title }))}
-            style={{
-              alignSelf: 'flex-start',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              paddingVertical: 12,
-              paddingHorizontal: 22,
-              borderRadius: theme.radius.pill,
-              backgroundColor: running ? theme.colors.bg : theme.colors.primary,
-            }}
-          >
-            <Ionicons name={running ? 'stop' : 'play'} size={18} color={theme.colors.ink} />
-            <Text variant="label" color={theme.colors.ink}>
-              {running ? 'Arrêter' : 'Démarrer'}
-            </Text>
-          </Pressable>
-        </View>
-      </BentoCard>
-
-      <EnergyModal
-        visible={pendingEnd !== null}
-        durationLabel={formatDuration(startedAt && pendingEnd ? Math.round((pendingEnd - startedAt) / 1000) : 0)}
-        onCancel={() => commit(undefined)}
-        onSubmit={(energy) => commit(energy)}
-      />
-    </>
+    <Pressable
+      onPress={() => router.push('/work/timetracker')}
+      style={{
+        marginTop: theme.spacing(4),
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: theme.colors.ink,
+        borderRadius: theme.radius.pill,
+        paddingVertical: 12,
+        paddingHorizontal: 18,
+      }}
+    >
+      <View style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: theme.colors.primary }} />
+      <Text variant="label" color={theme.colors.bg} style={{ flex: 1 }}>
+        En cours · {projectTitle ?? 'Sans projet'}
+      </Text>
+      <Text variant="label" color={theme.colors.primary}>
+        {formatClock(elapsed)}
+      </Text>
+    </Pressable>
   );
 }

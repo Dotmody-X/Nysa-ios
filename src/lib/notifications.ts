@@ -27,13 +27,20 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   }
 }
 
+/** Map a reminder sound choice to an expo-notifications content.sound value. */
+function soundValue(sound?: string): boolean | string {
+  if (sound === 'none') return false;
+  if (!sound || sound === 'default') return 'default';
+  return sound; // bundled filename, e.g. 'doux.wav'
+}
+
 /** One-off notification at a specific date. Returns the id (to cancel later). */
-export async function scheduleOnceAt(title: string, body: string, date: Date): Promise<string | null> {
+export async function scheduleOnceAt(title: string, body: string, date: Date, sound?: string): Promise<string | null> {
   if (date.getTime() <= Date.now()) return null; // in the past → skip
   if (!(await ensureNotificationPermission())) return null;
   try {
     return await Notifications.scheduleNotificationAsync({
-      content: { title, body },
+      content: { title, body, sound: soundValue(sound) },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
   } catch (e) {
@@ -43,11 +50,11 @@ export async function scheduleOnceAt(title: string, body: string, date: Date): P
 }
 
 /** Repeating daily notification at hour:minute. */
-export async function scheduleDaily(title: string, body: string, hour: number, minute: number): Promise<string | null> {
+export async function scheduleDaily(title: string, body: string, hour: number, minute: number, sound?: string): Promise<string | null> {
   if (!(await ensureNotificationPermission())) return null;
   try {
     return await Notifications.scheduleNotificationAsync({
-      content: { title, body },
+      content: { title, body, sound: soundValue(sound) },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
     });
   } catch (e) {

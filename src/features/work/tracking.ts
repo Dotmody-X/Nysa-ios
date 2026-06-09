@@ -27,8 +27,12 @@ export async function finishSession(args: {
   projectId?: string;
   projectTitle?: string;
   energy?: EnergyPayload;
+  note?: string;
+  billable?: boolean;
+  category?: string;
+  source?: 'tracker' | 'manual';
 }): Promise<{ durationSec: number }> {
-  const { startedAt, endedAt, projectId, projectTitle, energy } = args;
+  const { startedAt, endedAt, projectId, projectTitle, energy, note, billable, category, source = 'tracker' } = args;
   const durationSec = Math.max(1, Math.round((endedAt - startedAt) / 1000));
 
   const entries = database.get<Entry>('entries');
@@ -41,14 +45,14 @@ export async function finishSession(args: {
   const goal = goalRows[0];
 
   await database.write(async () => {
-    const label = projectTitle ? `Focus · ${projectTitle}` : 'Session de focus';
+    const label = note?.trim() || (projectTitle ? `Focus · ${projectTitle}` : 'Session de focus');
 
     // 1. the tracked block (Work)
     const block = entries.prepareCreate((e) => {
       e.poleId = POLE.work;
       e.type = 'time_block';
       e.title = label;
-      e.payload = { durationSec, source: 'tracker', projectId };
+      e.payload = { durationSec, source, projectId, note: note?.trim() || undefined, billable, category, startedAt, endedAt };
       e.occurredAt = new Date(startedAt);
       e.deletedAt = null;
     });
@@ -63,7 +67,7 @@ export async function finishSession(args: {
       e.poleId = POLE.planning;
       e.type = 'calendar_event';
       e.title = label;
-      e.payload = { start: startedAt, end: endedAt };
+      e.payload = { start: startedAt, end: endedAt, category: category ?? 'work' };
       e.occurredAt = new Date(startedAt);
       e.deletedAt = null;
     });

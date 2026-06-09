@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,15 @@ import { useObservedQuery } from '@/db/hooks';
 import { queryEntries } from '@/db/repositories/entries';
 import type { Entry } from '@/db/models/Entry';
 import { POLE, type ReminderPayload } from '@/poles/types';
-import { addReminder, removeReminder } from './reminders';
+import { addReminder, removeReminder, prunePastReminders } from './reminders';
+
+const SOUND_OPTIONS: { key: string; label: string }[] = [
+  { key: 'default', label: 'Par défaut' },
+  { key: 'doux.wav', label: 'Doux' },
+  { key: 'cloche.wav', label: 'Cloche' },
+  { key: 'marimba.wav', label: 'Marimba' },
+  { key: 'none', label: 'Silencieux' },
+];
 
 export function RemindersScreen() {
   const { theme } = useTheme();
@@ -20,6 +28,11 @@ export function RemindersScreen() {
 
   const reminders = useObservedQuery<Entry>(() => queryEntries(POLE.planning, 'reminder'), [], ['title', 'payload']);
   const [adding, setAdding] = useState(false);
+
+  // Clean up reminders that have already fired.
+  useEffect(() => {
+    prunePastReminders();
+  }, []);
 
   return (
     <Screen account={false}>
@@ -87,6 +100,7 @@ function ReminderModal({ visible, onClose }: { visible: boolean; onClose: () => 
   const { theme } = useTheme();
   const [title, setTitle] = useState('');
   const [daily, setDaily] = useState(false);
+  const [sound, setSound] = useState('default');
   const [date, setDate] = useState(() => {
     const d = new Date();
     d.setHours(d.getHours() + 1, 0, 0, 0);
@@ -95,9 +109,10 @@ function ReminderModal({ visible, onClose }: { visible: boolean; onClose: () => 
 
   const submit = async () => {
     if (!title.trim()) return;
-    await addReminder({ title: title.trim(), at: date.getTime(), repeat: daily ? 'daily' : 'once' });
+    await addReminder({ title: title.trim(), at: date.getTime(), repeat: daily ? 'daily' : 'once', sound });
     setTitle('');
     setDaily(false);
+    setSound('default');
     onClose();
   };
 
@@ -110,7 +125,42 @@ function ReminderModal({ visible, onClose }: { visible: boolean; onClose: () => 
         <Text variant="label">Tous les jours (heure fixe)</Text>
       </Pressable>
 
-      <DateTimeFields value={date} onChange={setDate} withDate={!daily} />
+      <DateTimeFields value={date} onChange={setDate} withDate={!daily} collapsible />
+
+      <Text variant="label" color={theme.colors.inkSoft}>
+        Sonnerie
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {SOUND_OPTIONS.map((opt) => {
+          const active = opt.key === sound;
+          return (
+            <Pressable
+              key={opt.key}
+              onPress={() => setSound(opt.key)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: theme.radius.pill,
+                backgroundColor: active ? theme.colors.ink : theme.colors.surface,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+              }}
+            >
+              <Ionicons
+                name={opt.key === 'none' ? 'volume-mute' : 'musical-note'}
+                size={14}
+                color={active ? theme.colors.bg : theme.colors.muted}
+              />
+              <Text variant="label" color={active ? theme.colors.bg : theme.colors.ink}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <PrimaryButton label="Créer le rappel" onPress={submit} />
     </Sheet>

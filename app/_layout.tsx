@@ -7,11 +7,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { useAppFonts } from '@/theme/fonts';
-import { seedIfEmpty } from '@/db/seed';
 import { LlmLoader } from '@/features/ai/LlmLoader';
 import { useLlmStatus } from '@/features/ai/llmStatus';
 import { useSession } from '@/features/auth/auth';
 import { SyncManager } from '@/db/sync/SyncManager';
+import { useNavPrefs } from '@/features/nav/navPrefs';
+import { useCalendarSync } from '@/features/planning/deviceCalendar';
+import { prunePastReminders } from '@/features/planning/reminders';
+import { useGroupes } from '@/features/work/groupes';
+import { useProfile } from '@/features/profile/profile';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -25,7 +29,13 @@ export default function RootLayout() {
   const ready = fontsLoaded && !authLoading;
 
   useEffect(() => {
-    seedIfEmpty().catch((e) => console.warn('[seed]', e));
+    // No auto-seed: with mandatory auth + cloud sync, demo data would duplicate
+    // the user's synced data on every clean rebuild.
+    useNavPrefs.getState().load();
+    useCalendarSync.getState().load();
+    useGroupes.getState().load();
+    useProfile.getState().load();
+    prunePastReminders().catch(() => {});
   }, []);
 
   useEffect(() => {

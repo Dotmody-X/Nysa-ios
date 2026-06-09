@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, View } from 'react-native';
+import { Alert, Modal, Pressable, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { isHealthAvailable, requestSleepPermission, readLastNightSleepMinutes } from '@/integrations/health';
@@ -7,6 +7,9 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { BentoGrid } from '@/components/BentoGrid';
 import { BentoCard } from '@/components/BentoCard';
+import { StackedCard } from '@/components/StackedCard';
+import { STACK_STYLES } from '@/features/goals/GoalsScreen';
+import { useProfile } from '@/features/profile/profile';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useObservedQuery } from '@/db/hooks';
 import { queryEntries, queryEntriesBetween } from '@/db/repositories/entries';
@@ -23,6 +26,7 @@ import {
   type SleepPayload,
   type WorkoutPayload,
   type MedicationPayload,
+  type Nutriscore,
 } from '@/poles/types';
 import { startOfDay, endOfDay, formatDuration } from '@/lib/time';
 import { logMeal, logMeditation, logMood, logSleep, logWorkout } from './wellbeing';
@@ -91,6 +95,17 @@ export function WellbeingScreen() {
     [meditations],
   );
 
+  const todayCalories = useMemo(
+    () => meals.reduce((s, m) => s + ((m.payload as MealPayload).calories ?? 0), 0),
+    [meals],
+  );
+  const worstScore = useMemo(() => {
+    const scores = meals.map((m) => (m.payload as MealPayload).score).filter(Boolean) as string[];
+    return scores.length ? scores.sort()[scores.length - 1] : null; // 'E' worst (last alphabetically)
+  }, [meals]);
+
+  const sex = useProfile((s) => s.sex);
+
   return (
     <Screen>
       <Text variant="display">Bien-être</Text>
@@ -149,55 +164,70 @@ export function WellbeingScreen() {
           </View>
         </BentoCard>
 
-        <BentoCard icon="restaurant" title="Repas" accent="secondary" subtitle="aujourd'hui">
-          <Text variant="stat">{meals.length}</Text>
+        <BentoCard
+          icon="restaurant"
+          title="Calories"
+          accent="secondary"
+          subtitle={`${meals.length} repas${worstScore ? ` · ${worstScore}` : ''}`}
+        >
+          <Text variant="stat">{todayCalories || 0}</Text>
         </BentoCard>
 
         <BentoCard icon="barbell" title="Calme" accent="secondary" subtitle="médité aujourd'hui">
           <Text variant="stat">{meditatedToday} min</Text>
         </BentoCard>
 
-        <BentoCard
-          icon="medkit"
-          title="Médicaments"
-          accent="secondary"
-          subtitle={medsExpected ? `${medIntakes.length} / ${medsExpected} aujourd'hui` : 'À configurer'}
-          onPress={() => router.push('/medications')}
-        />
-
-        <BentoCard
-          icon="restaurant"
-          title="Cuisine"
-          accent="secondary"
-          subtitle="Courses · placard · recettes"
-          onPress={() => router.push('/kitchen')}
-        />
-
-        <BentoCard
-          icon="medical"
-          title="Médecins & RDV"
-          accent="secondary"
-          subtitle="Praticiens · rendez-vous"
-          onPress={() => router.push('/care')}
-        />
-
-        <BentoCard
-          icon="calendar-number"
-          title="Repas"
-          accent="secondary"
-          subtitle="Planning de la semaine"
-          onPress={() => router.push('/mealplan')}
-        />
-
-        <BentoCard
-          span={2}
-          icon="flower"
-          title="Cycle"
-          accent="secondary"
-          subtitle="Suivi privé du cycle menstruel"
-          onPress={() => router.push('/cycle')}
-        />
       </BentoGrid>
+
+      {/* Sub-poles — stacked classification cards */}
+      <View style={{ marginTop: theme.spacing(6) }}>
+        {(() => {
+          type Nav = {
+            key: string;
+            title: string;
+            subtitle: string;
+            center?: string;
+            progress?: number;
+            chevron?: boolean;
+            route: '/medications' | '/kitchen' | '/care' | '/mealplan' | '/cycle';
+          };
+          const navCards: Nav[] = [
+            { key: 'care', title: 'Médecins & RDV', subtitle: 'Praticiens · rendez-vous · mesures', chevron: true, route: '/care' as const },
+            {
+              key: 'medications',
+              title: 'Médicaments',
+              subtitle: medsExpected ? `${medIntakes.length} / ${medsExpected} aujourd'hui` : 'À configurer',
+              center: medsExpected ? `${medIntakes.length}/${medsExpected}` : undefined,
+              progress: medsExpected ? medIntakes.length / medsExpected : 0,
+              chevron: !medsExpected,
+              route: '/medications' as const,
+            },
+            { key: 'kitchen', title: 'Cuisine', subtitle: 'Courses · placard · recettes', chevron: true, route: '/kitchen' as const },
+            { key: 'mealplan', title: 'Planning repas', subtitle: 'Repas de la semaine', chevron: true, route: '/mealplan' as const },
+            ...(sex === 'female'
+              ? [{ key: 'cycle', title: 'Cycle', subtitle: 'Suivi privé du cycle menstruel', chevron: true, route: '/cycle' as const }]
+              : []),
+          ];
+          return navCards.map((c, i) => {
+            const s = STACK_STYLES[i % STACK_STYLES.length];
+            return (
+              <StackedCard
+                key={c.key}
+                withHandle={i > 0}
+                title={c.title}
+                subtitle={c.subtitle}
+                center={c.center}
+                progress={c.progress ?? 0}
+                chevron={c.chevron}
+                bg={theme.colors[s.bg]}
+                fg={theme.colors[s.fg]}
+                ring={theme.colors[s.ring]}
+                onPress={() => router.push(c.route)}
+              />
+            );
+          });
+        })()}
+      </View>
 
       {/* Quick log */}
       <View style={{ marginTop: theme.spacing(7) }}>
@@ -242,9 +272,18 @@ export function WellbeingScreen() {
 /** Tap-driven quick logger. One tap on a preset records the entry. */
 function LogSheet({ kind, onClose }: { kind: LogKind | null; onClose: () => void }) {
   const { theme } = useTheme();
+  const [mealKind, setMealKind] = useState<MealPayload['kind']>('lunch');
+  const [mealCal, setMealCal] = useState('');
+  const [mealScore, setMealScore] = useState<Nutriscore | undefined>(undefined);
 
   const done = async (fn: () => Promise<unknown>) => {
     await fn();
+    onClose();
+  };
+  const submitMeal = async () => {
+    await logMeal({ kind: mealKind, calories: mealCal ? Number(mealCal) : undefined, score: mealScore });
+    setMealCal('');
+    setMealScore(undefined);
     onClose();
   };
 
@@ -333,18 +372,58 @@ function LogSheet({ kind, onClose }: { kind: LogKind | null; onClose: () => void
           ) : null}
 
           {kind === 'meal' ? (
-            <Chips>
-              {(
-                [
-                  ['breakfast', 'Petit-déj'],
-                  ['lunch', 'Déjeuner'],
-                  ['dinner', 'Dîner'],
-                  ['snack', 'Encas'],
-                ] as [MealPayload['kind'], string][]
-              ).map(([k, label]) => (
-                <Chip key={k} label={label} onPress={() => done(() => logMeal({ kind: k }))} />
-              ))}
-            </Chips>
+            <View style={{ gap: theme.spacing(3) }}>
+              <Chips>
+                {(
+                  [
+                    ['breakfast', 'Petit-déj'],
+                    ['lunch', 'Déjeuner'],
+                    ['dinner', 'Dîner'],
+                    ['snack', 'Encas'],
+                  ] as [MealPayload['kind'], string][]
+                ).map(([k, label]) => (
+                  <Pressable
+                    key={k}
+                    onPress={() => setMealKind(k)}
+                    style={{ paddingVertical: 12, paddingHorizontal: 18, borderRadius: theme.radius.md, backgroundColor: mealKind === k ? theme.colors.primary : theme.colors.surfaceAlt }}
+                  >
+                    <Text variant="label" color={mealKind === k ? theme.colors.onPrimary : theme.colors.ink}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </Chips>
+              <TextInput
+                value={mealCal}
+                onChangeText={setMealCal}
+                placeholder="Calories (optionnel)"
+                placeholderTextColor={theme.colors.muted}
+                keyboardType="numeric"
+                style={{ fontFamily: theme.fonts.body, fontSize: 15, color: theme.colors.ink, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, paddingHorizontal: 16, paddingVertical: 12 }}
+              />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['A', 'B', 'C', 'D', 'E'] as Nutriscore[]).map((sc) => {
+                  const colors: Record<Nutriscore, string> = { A: '#3FA34D', B: '#9ACD32', C: '#E8C32E', D: '#E08A2E', E: '#D14B4B' };
+                  const active = mealScore === sc;
+                  return (
+                    <Pressable
+                      key={sc}
+                      onPress={() => setMealScore(active ? undefined : sc)}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: theme.radius.md, alignItems: 'center', backgroundColor: active ? colors[sc] : theme.colors.surfaceAlt }}
+                    >
+                      <Text variant="label" color={active ? '#fff' : theme.colors.ink}>
+                        {sc}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable onPress={submitMeal} style={{ paddingVertical: 14, borderRadius: theme.radius.pill, alignItems: 'center', backgroundColor: theme.colors.primary }}>
+                <Text variant="label" color={theme.colors.onPrimary}>
+                  Logguer le repas
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
         </Pressable>
       </Pressable>

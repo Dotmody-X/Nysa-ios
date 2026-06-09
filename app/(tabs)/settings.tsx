@@ -10,6 +10,13 @@ import { themes, type ThemeName } from '@/theme/tokens';
 import { useLlmStatus } from '@/features/ai/llmStatus';
 import { useSession, signOut } from '@/features/auth/auth';
 import { useSyncStatus } from '@/db/sync/syncStore';
+import { useNavPrefs } from '@/features/nav/navPrefs';
+import { POLE_CATALOG } from '@/poles/catalog';
+import { useCalendarSync } from '@/features/planning/deviceCalendar';
+import { Platform, Alert } from 'react-native';
+import { dedupeEntries, clearDemoData } from '@/db/maintenance';
+import { GroupesSettings } from '@/features/work/GroupesSettings';
+import { useProfile, type Sex } from '@/features/profile/profile';
 
 export default function AccountScreen() {
   const { theme, themeName, setTheme } = useTheme();
@@ -17,6 +24,40 @@ export default function AccountScreen() {
   const names = Object.keys(themes) as ThemeName[];
   const { session } = useSession();
   const { syncing, lastSyncedAt, error: syncError, run: runSync } = useSyncStatus();
+  const { poles: navPoles, choose: choosePole } = useNavPrefs();
+  const { sex, setSex } = useProfile();
+  const SEX_OPTIONS: { key: Sex; label: string }[] = [
+    { key: 'female', label: 'Femme' },
+    { key: 'male', label: 'Homme' },
+    { key: 'unspecified', label: 'Non précisé' },
+  ];
+  const { connected: calConnected, busy: calBusy, connect: connectCal, disconnect: disconnectCal } = useCalendarSync();
+  const calProvider = Platform.OS === 'ios' ? 'iCloud / Apple Calendrier' : 'Google Agenda';
+  const onToggleCal = async () => {
+    if (calConnected) {
+      disconnectCal();
+      return;
+    }
+    const res = await connectCal();
+    if (!res.ok) Alert.alert('Calendrier', res.error ?? 'Connexion impossible');
+  };
+  const onDedupe = async () => {
+    const n = await dedupeEntries();
+    Alert.alert('Nettoyage', n > 0 ? `${n} doublon${n > 1 ? 's' : ''} supprimé${n > 1 ? 's' : ''}.` : 'Aucun doublon trouvé.');
+  };
+  const onClearDemo = () => {
+    Alert.alert('Données de démo', 'Supprimer les projets, tâches et habitudes de démonstration (App Nysa, Client freelance…) ainsi que leurs données associées ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          const n = await clearDemoData();
+          Alert.alert('Données de démo', n > 0 ? `${n} entrée${n > 1 ? 's' : ''} de démo supprimée${n > 1 ? 's' : ''}.` : 'Aucune donnée de démo trouvée.');
+        },
+      },
+    ]);
+  };
   const { enabled: llmEnabled, state: llmState, progress: llmProgress, setEnabled: setLlmEnabled } = useLlmStatus();
   const llmLabel =
     !llmEnabled
@@ -122,6 +163,144 @@ export default function AccountScreen() {
           <Ionicons name="refresh" size={18} color={theme.colors.muted} />
         </Pressable>
       ) : null}
+
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <Text variant="title">Profil</Text>
+        <Text variant="caption" color={theme.colors.inkSoft} style={{ marginBottom: theme.spacing(2) }}>
+          Le suivi du cycle menstruel n'apparaît que pour le profil « Femme ».
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {SEX_OPTIONS.map((opt) => {
+            const active = opt.key === sex;
+            return (
+              <Pressable
+                key={opt.key}
+                onPress={() => setSex(opt.key)}
+                style={{ flex: 1, paddingVertical: 10, borderRadius: theme.radius.pill, alignItems: 'center', backgroundColor: active ? theme.colors.ink : theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border }}
+              >
+                <Text variant="label" color={active ? theme.colors.bg : theme.colors.ink}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <Text variant="title">Pôles dans la barre</Text>
+        <Text variant="caption" color={theme.colors.inkSoft} style={{ marginBottom: theme.spacing(2) }}>
+          Choisis les 2 pôles affichés dans le dock (entre Accueil et Objectifs).
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {POLE_CATALOG.map((p) => {
+            const active = navPoles.includes(p.key);
+            return (
+              <Pressable
+                key={p.key}
+                onPress={() => choosePole(p.key)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: theme.radius.pill,
+                  backgroundColor: active ? theme.colors.ink : theme.colors.surface,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                }}
+              >
+                <Ionicons name={p.icon} size={16} color={active ? theme.colors.bg : theme.colors.muted} />
+                <Text variant="label" color={active ? theme.colors.bg : theme.colors.ink}>
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <Text variant="title">Calendrier</Text>
+        <Text variant="caption" color={theme.colors.inkSoft} style={{ marginBottom: theme.spacing(2) }}>
+          Synchronise tes événements Planning avec {calProvider}.
+        </Text>
+        <Pressable
+          onPress={onToggleCal}
+          disabled={calBusy}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            backgroundColor: theme.colors.surface,
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            padding: theme.spacing(4),
+            opacity: calBusy ? 0.6 : 1,
+          }}
+        >
+          <Ionicons name={calConnected ? 'calendar' : 'calendar-outline'} size={22} color={theme.colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text variant="body">{calConnected ? 'Connecté' : 'Connecter le calendrier'}</Text>
+            <Text variant="label" color={theme.colors.muted}>
+              {calBusy ? 'Connexion…' : calConnected ? `Synchronisé avec ${calProvider}` : 'Appuie pour autoriser'}
+            </Text>
+          </View>
+          <Ionicons name={calConnected ? 'close-circle-outline' : 'chevron-forward'} size={18} color={theme.colors.muted} />
+        </Pressable>
+      </View>
+
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <Text variant="title">Données</Text>
+        <Text variant="caption" color={theme.colors.inkSoft} style={{ marginBottom: theme.spacing(2) }}>
+          Supprime les projets, tâches et habitudes en double.
+        </Text>
+        <Pressable
+          onPress={onDedupe}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            backgroundColor: theme.colors.surface,
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            padding: theme.spacing(4),
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={22} color={theme.colors.accent} />
+          <Text variant="body" style={{ flex: 1 }}>
+            Nettoyer les doublons
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.muted} />
+        </Pressable>
+        <Pressable
+          onPress={onClearDemo}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            marginTop: theme.spacing(3),
+            backgroundColor: theme.colors.surface,
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            padding: theme.spacing(4),
+          }}
+        >
+          <Ionicons name="trash-outline" size={22} color={theme.colors.danger} />
+          <Text variant="body" style={{ flex: 1 }}>
+            Effacer les données de démo
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.muted} />
+        </Pressable>
+      </View>
+
+      <View style={{ marginTop: theme.spacing(7) }}>
+        <GroupesSettings />
+      </View>
 
       <View style={{ marginTop: theme.spacing(7) }}>
         <Text variant="title">Thème</Text>

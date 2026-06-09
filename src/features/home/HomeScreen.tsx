@@ -12,7 +12,7 @@ import { queryEntries, queryEntriesBetween } from '@/db/repositories/entries';
 import { queryGoalByMetric } from '@/db/repositories/goals';
 import type { Entry } from '@/db/models/Entry';
 import type { Goal } from '@/db/models/Goal';
-import { POLE, METRIC } from '@/poles/types';
+import { POLE, METRIC, type HabitCheckPayload } from '@/poles/types';
 import { startOfDay, endOfDay, formatDuration } from '@/lib/time';
 import { POLES } from '@/poles/registry';
 import { QuickAddBar } from '@/features/ai/QuickAddBar';
@@ -27,6 +27,13 @@ const POLE_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   relationships: 'people',
   leisure: 'game-controller',
 };
+
+function weekStartMs(): number {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 export function HomeScreen() {
   const { theme } = useTheme();
@@ -47,16 +54,33 @@ export function HomeScreen() {
     [],
     ['payload'],
   );
-
-  const focusGoal = focusGoals[0];
-  const weekHours = focusGoal?.currentValue ?? 0;
-  const target = focusGoal?.targetValue ?? 20;
-  const pct = target > 0 ? Math.min(1, weekHours / target) : 0;
+  const weekBlocks = useObservedQuery<Entry>(
+    () => queryEntriesBetween(POLE.work, 'time_block', weekStartMs(), Date.now() + 86_400_000),
+    [],
+    ['payload'],
+  );
 
   const todaySec = useMemo(
     () => todayBlocks.reduce((s, b) => s + (Number((b.payload as { durationSec?: number }).durationSec) || 0), 0),
     [todayBlocks],
   );
+  const weekHours = useMemo(
+    () => weekBlocks.reduce((s, b) => s + (Number((b.payload as { durationSec?: number }).durationSec) || 0), 0) / 3600,
+    [weekBlocks],
+  );
+  const target = focusGoals[0]?.targetValue ?? 20;
+  const pct = target > 0 ? Math.min(1, weekHours / target) : 0;
+
+  // Only count checks that still map to an existing habit (deleted habits leave checks behind).
+  const habitsDone = useMemo(() => {
+    const ids = new Set(habits.map((h) => h.id));
+    const checked = new Set(
+      todayChecks
+        .map((c) => (c.payload as HabitCheckPayload).habitId)
+        .filter((id) => ids.has(id)),
+    );
+    return checked.size;
+  }, [habits, todayChecks]);
 
   return (
     <Screen>
@@ -98,7 +122,7 @@ export function HomeScreen() {
 
         <BentoCard tone="secondary" span={1} tall subtitle="aujourd'hui" title="Habitudes" icon="repeat">
           <Text variant="stat" color={theme.colors.ink}>
-            {todayChecks.length} / {habits.length}
+            {habitsDone} / {habits.length}
           </Text>
         </BentoCard>
 
@@ -108,6 +132,7 @@ export function HomeScreen() {
           title="Focus de la semaine"
           icon="flag"
           subtitle={`${weekHours.toFixed(1)} / ${target} h · ${Math.round(pct * 100)}%`}
+          onPress={() => router.push('/goals')}
         >
           <View
             style={{

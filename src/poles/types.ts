@@ -36,42 +36,73 @@ export const RELATION = {
 // Note: workouts reuse RELATION.scheduledIn to mirror into Planning.
 
 // ---- Payload shapes -------------------------------------------------------
+export type ProjectStatus = 'active' | 'paused' | 'completed' | 'archived';
+export type Priority = 'low' | 'med' | 'high' | 'urgent';
+
 export type ProjectPayload = {
-  status: 'active' | 'archived';
+  status: ProjectStatus;
   color?: string;
   description?: string;
+  groupe?: string; // brand / large category (Le Mixologue, E-Smoker, Interne…)
+  priority?: Priority;
+  deadline?: number; // epoch ms
+  progress?: number; // 0-100 (manual)
+  budget?: number; // € target
+  rate?: number; // €/h, for billable amount
 };
 
 export type TaskPayload = {
   done: boolean;
   projectId?: string;
-  priority?: 'low' | 'med' | 'high';
-  due?: number; // epoch ms
+  priority?: Priority;
+  due?: number; // epoch ms (date)
+  dueTime?: string; // 'HH:MM'
+  category?: string;
+  tags?: string[];
+  estimatedMin?: number;
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
+  completedAt?: number;
 };
 
 export type TimeBlockPayload = {
   durationSec: number;
   source: 'tracker' | 'manual';
   projectId?: string;
-  note?: string;
+  note?: string; // description
+  billable?: boolean;
+  category?: string;
+  startedAt?: number; // epoch ms (for manual/edit)
+  endedAt?: number;
 };
+
+export type ProjectNotePayload = { projectId: string; content?: string };
+export type ProjectFilePayload = { projectId: string; uri: string; size?: number; mime?: string };
+export type ProjectLinkPayload = { projectId: string; url: string };
 
 export type CalendarEventPayload = {
   start: number; // epoch ms
   end: number; // epoch ms
   allDay?: boolean;
+  category?: string; // category key (see features/planning/categories.ts)
+  location?: string;
+  notes?: string;
+  /** Native device-calendar event id, when mirrored to iCloud/Google. */
+  externalId?: string;
 };
 
 export type ReminderPayload = {
   at: number; // epoch ms (next fire time)
   repeat: 'once' | 'daily';
   notifId?: string; // scheduled local-notification id (to cancel)
+  sound?: string; // 'default' | 'none' | bundled filename (e.g. 'doux.wav')
 };
 
 export type HabitPayload = {
   schedule: 'daily';
   icon?: string;
   streak: number;
+  /** Optional daily routine grouping (morning / evening checklist). */
+  routine?: 'morning' | 'evening';
 };
 
 export type HabitCheckPayload = {
@@ -117,9 +148,13 @@ export type WorkoutPayload = {
   intensity?: Rating;
 };
 
+export type MedReminder = { time: string; notifId?: string }; // time = 'HH:MM'
 export type MedicationPayload = {
-  dosage?: string; // e.g. "500 mg"
+  dosage?: string; // numeric value, e.g. "500"
+  unit?: string; // 'mg' | 'pilule' | 'cl' | 'ml' | 'gouttes' | …
   timesPerDay: number; // expected doses per day
+  reminders?: MedReminder[]; // scheduled daily notifications
+  photoUri?: string; // optional photo of the medication
   note?: string;
 };
 
@@ -153,6 +188,14 @@ export type AppointmentPayload = {
   start: number; // epoch ms
   durationMin?: number;
   location?: string;
+};
+
+/** A health measurement (weight, blood pressure, heart rate…). */
+export type MeasurePayload = {
+  kind: string; // 'weight' | 'systolic' | 'diastolic' | 'heart_rate' | 'temperature' | custom
+  value: number;
+  unit?: string;
+  note?: string;
 };
 
 /** Menstrual cycle — a logged period. Kept out of the AI context by default. */
@@ -234,6 +277,9 @@ export type EntryPayloadMap = {
   project: ProjectPayload;
   task: TaskPayload;
   time_block: TimeBlockPayload;
+  project_note: ProjectNotePayload;
+  project_file: ProjectFilePayload;
+  project_link: ProjectLinkPayload;
   calendar_event: CalendarEventPayload;
   habit: HabitPayload;
   habit_check: HabitCheckPayload;
@@ -251,6 +297,7 @@ export type EntryPayloadMap = {
   recipe: RecipePayload;
   practitioner: PractitionerPayload;
   appointment: AppointmentPayload;
+  measure: MeasurePayload;
   period: PeriodPayload;
   meal_plan: MealPlanPayload;
   transaction: TransactionPayload;

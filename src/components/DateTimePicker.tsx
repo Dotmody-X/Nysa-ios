@@ -19,15 +19,19 @@ export function DateTimeFields({
   value,
   onChange,
   withDate = true,
+  collapsible = false,
 }: {
   value: Date;
   onChange: (date: Date) => void;
   withDate?: boolean;
+  /** Show a compact summary that expands the picker on tap. */
+  collapsible?: boolean;
 }) {
   const { theme } = useTheme();
   const palette = theme.poleColors.planning;
   const [viewYear, setViewYear] = useState(value.getFullYear());
   const [viewMonth, setViewMonth] = useState(value.getMonth());
+  const [open, setOpen] = useState(!collapsible);
 
   const first = new Date(viewYear, viewMonth, 1);
   const lead = (first.getDay() + 6) % 7;
@@ -44,8 +48,45 @@ export function DateTimeFields({
   const pickHour = (h: number) => onChange(new Date(value.getFullYear(), value.getMonth(), value.getDate(), h, value.getMinutes()));
   const pickMinute = (m: number) => onChange(new Date(value.getFullYear(), value.getMonth(), value.getDate(), value.getHours(), m));
 
+  const summary = withDate
+    ? `${value.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} · ${value.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+    : value.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  if (collapsible && !open) {
+    return (
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          backgroundColor: theme.colors.surface,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: 16,
+          paddingVertical: 13,
+        }}
+      >
+        <Ionicons name={withDate ? 'calendar-outline' : 'time-outline'} size={18} color={palette.solid} />
+        <Text variant="body" style={{ flex: 1, textTransform: 'capitalize' }}>
+          {summary}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={theme.colors.muted} />
+      </Pressable>
+    );
+  }
+
   return (
     <View>
+      {collapsible ? (
+        <Pressable onPress={() => setOpen(false)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: theme.spacing(2) }}>
+          <Ionicons name="chevron-up" size={18} color={theme.colors.muted} />
+          <Text variant="label" color={theme.colors.inkSoft} style={{ flex: 1, textTransform: 'capitalize' }}>
+            {summary}
+          </Text>
+        </Pressable>
+      ) : null}
       {withDate ? (
         <View style={{ marginBottom: theme.spacing(2) }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
